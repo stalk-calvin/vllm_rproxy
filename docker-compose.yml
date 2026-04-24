@@ -1,0 +1,48 @@
+version: '3.8'
+services:
+  guardian:
+    image: ollama/ollama:latest
+    container_name: guardian
+    entrypoint: /bin/sh
+    command: -c "ollama serve & sleep 10 && ollama pull granite3-guardian:2b && wait"
+    networks:
+      - proxy_network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ollama_data:/root/.ollama
+
+  mitmproxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.mitmproxy
+    container_name: mitmproxy
+    ports:
+      - "8080:8080"
+    networks:
+      - proxy_network
+    depends_on:
+      guardian:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    ports:
+      - "443:443"
+    networks:
+      - proxy_network
+    depends_on:
+      - mitmproxy
+
+networks:
+  proxy_network:
+    driver: bridge
+volumes:
+  ollama_data:
